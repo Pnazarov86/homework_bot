@@ -1,8 +1,8 @@
 import logging
-from logging.handlers import RotatingFileHandler
 import os
 import sys
 import time
+from logging.handlers import RotatingFileHandler
 
 import requests
 import telegram
