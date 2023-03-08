@@ -1,4 +1,5 @@
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 import time
@@ -27,34 +28,39 @@ HOMEWORK_VERDICTS = {
 
 logging.basicConfig(
     level=logging.DEBUG,
-    filename='my_logger.log',
-    encoding='utf-8',
     format='%(asctime)s, %(levelname)s, %(message)s',
+    handlers=[
+        RotatingFileHandler(
+            'my_logger.log',
+            encoding='utf-8',
+            maxBytes=10000000,
+            backupCount=5
+        ),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
-logger = logging.getLogger(__name__)
-handler = logging.StreamHandler(sys.stdout)
-logger.addHandler(handler)
 
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    if (
-        PRACTICUM_TOKEN is None
-        and TELEGRAM_TOKEN is None
-        and TELEGRAM_CHAT_ID is None
-    ):
-        logger.critical('Отсутствие обязательных переменных окружения!')
-        return False
-    return True
+    tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
+    for token in tokens:
+        if token is None:
+            error_message = 'Отсутствие обязательных переменных окружения!'
+            logging.critical(error_message)
+            raise Exception(error_message)
+        return True
 
 
-def send_message(bot, message) -> None:
+def send_message(bot, message):
     """Формирование сообщения для бота."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logger.debug(f'Сообщение успешно отправленно: {message}')
-    except Exception as error:
-        logger.error(f'Сообщение не отправленно: {error}')
+        logging.debug(f'Сообщение успешно отправленно: {message}')
+        return True
+    except telegram.TelegramError as error:
+        logging.error(f'Сообщение не отправленно: {error}')
+        return False
 
 
 def get_api_answer(timestamp):
@@ -83,17 +89,15 @@ def check_response(response):
 
 def parse_status(homework):
     """Извлекает статус домашней работы."""
-    try:
-        homework_name = homework['homework_name']
-        homework_status = homework['status']
-        verdict = HOMEWORK_VERDICTS[homework_status]
-    except Exception as error:
-        if 'homework_name' not in homework:
-            raise KeyError(f'Ключ homework_name отсутствует: {error}')
-        if 'status' not in homework:
-            raise KeyError(f'Ключ status отсутствует: {error}')
-        if not isinstance(homework_status, HOMEWORK_VERDICTS):
-            raise ValueError(f'Неизвестный статус домашней работы: {error}')
+    if 'homework_name' not in homework:
+        raise KeyError('Ключ homework_name отсутствует.')
+    homework_name = homework['homework_name']
+    if 'status' not in homework:
+        raise KeyError('Ключ status отсутствует.')
+    homework_status = homework['status']
+    if homework_status not in HOMEWORK_VERDICTS:
+        raise ValueError('Неизвестный статус домашней работы.')
+    verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -107,24 +111,24 @@ def main():
     prev_error = ''
     while True:
         try:
-            response = get_api_answer(timestamp - RETRY_PERIOD)
-            homework = check_response(response)
-            if len(homework) > 0:
-                message = parse_status(homework[0])
+            response = get_api_answer(timestamp)
+            timestamp = response.get('current_date', int(time.time()))
+            homeworks_list = check_response(response)
+            if not homeworks_list:
+                logging.debug('Новый статус отсутствует.')
+                status_message = prev_message
             else:
-                message = 'Новый статус отсутствует.'
-            if message != prev_message:
-                send_message(bot, message)
-                prev_message = message
-            else:
-                logger.debug(message)
+                status_message = parse_status(homeworks_list[0])
+            if status_message != prev_message:
+                logging.debug(status_message)
+                if send_message(bot, status_message):
+                    prev_message = status_message
         except Exception as error:
-            message = f'Сбой в работе программы: {error}'
-            if message != prev_error:
-                send_message(bot, message)
-                prev_error = message
-            else:
-                logger.error(message)
+            error_message = f'Сбой в работе программы: {error}'
+            if error_message != prev_error:
+                logging.error(error_message)
+                if send_message(bot, error_message):
+                    prev_error = error_message
         time.sleep(RETRY_PERIOD)
 
 
