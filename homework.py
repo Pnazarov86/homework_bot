@@ -26,20 +26,6 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s, %(levelname)s, %(message)s',
-    handlers=[
-        RotatingFileHandler(
-            'my_logger.log',
-            encoding='utf-8',
-            maxBytes=10000000,
-            backupCount=5
-        ),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
@@ -48,7 +34,7 @@ def check_tokens():
         if token is None:
             error_message = 'Отсутствие обязательных переменных окружения!'
             logging.critical(error_message)
-            raise Exception(error_message)
+            return False
         return True
 
 
@@ -108,7 +94,6 @@ def main():
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     prev_message = ''
-    prev_error = ''
     while True:
         try:
             response = get_api_answer(timestamp)
@@ -116,21 +101,34 @@ def main():
             homeworks_list = check_response(response)
             if not homeworks_list:
                 logging.debug('Новый статус отсутствует.')
-                status_message = prev_message
             else:
                 status_message = parse_status(homeworks_list[0])
-            if status_message != prev_message:
-                logging.debug(status_message)
-                if send_message(bot, status_message):
-                    prev_message = status_message
+                if status_message != prev_message:
+                    logging.debug(status_message)
+                    if send_message(bot, status_message):
+                        prev_message = status_message
+                        timestamp = response.get('current_date', timestamp)
         except Exception as error:
             error_message = f'Сбой в работе программы: {error}'
-            if error_message != prev_error:
+            if error_message != prev_message:
                 logging.error(error_message)
                 if send_message(bot, error_message):
-                    prev_error = error_message
+                    prev_message = error_message
         time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s, %(levelname)s, %(message)s',
+        handlers=[
+            RotatingFileHandler(
+                'my_logger.log',
+                encoding='utf-8',
+                maxBytes=10000000,
+                backupCount=5
+            ),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
     main()
