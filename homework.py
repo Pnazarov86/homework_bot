@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import time
+from http import HTTPStatus
 from logging.handlers import RotatingFileHandler
 
 import requests
@@ -29,13 +30,7 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
-    for token in tokens:
-        if token is None:
-            error_message = 'Отсутствие обязательных переменных окружения!'
-            logging.critical(error_message)
-            return False
-        return True
+    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
 def send_message(bot, message):
@@ -54,11 +49,12 @@ def get_api_answer(timestamp):
     payload = {'from_date': timestamp}
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
-    except Exception as error:
-        message = f'Недоступность эндпоинта: {error}'
-        raise APIAnswerException(message)
-    if response.status_code != 200:
-        raise APIAnswerException(message)
+    except Exception:
+        raise APIAnswerException('Ошибка подключения к API.')
+    if response.status_code != HTTPStatus.OK:
+        raise APIAnswerException(
+            f'Неверный код ответа: {response.status_code}'
+        )
     return response.json()
 
 
@@ -90,7 +86,9 @@ def parse_status(homework):
 def main():
     """Основная логика работы бота."""
     if not check_tokens():
-        sys.exit()
+        error_message = 'Отсутствие обязательных переменных окружения!'
+        logging.critical(error_message)
+        sys.exit(error_message)
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     prev_message = ''
