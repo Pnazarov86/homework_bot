@@ -95,7 +95,6 @@ def main():
     while True:
         try:
             response = get_api_answer(timestamp)
-            timestamp = response.get('current_date', int(time.time()))
             homeworks_list = check_response(response)
             if not homeworks_list:
                 logging.debug('Новый статус отсутствует.')
