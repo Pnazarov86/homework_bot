@@ -104,7 +104,7 @@ def main():
                     logging.debug(status_message)
                     if send_message(bot, status_message):
                         prev_message = status_message
-                        timestamp = response.get('current_date', timestamp)
+            timestamp = response.get('current_date', timestamp)
         except Exception as error:
             error_message = f'Сбой в работе программы: {error}'
             if error_message != prev_message:
